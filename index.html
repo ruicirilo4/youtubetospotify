@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>YouTube to Spotify Playlist</title>
+    <style>
+      body {
+  font-family: Arial, sans-serif;
+  background-color: #f0f0f0;
+  margin: 0;
+  padding: 0;
+  text-align: center;
+}
+
+h1 {
+  color: #333;
+}
+
+.container {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 20px;
+  background-color: #fff;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  border-radius: 5px;
+}
+
+label {
+  font-weight: bold;
+  margin-right: 10px;
+}
+
+input[type="text"] {
+  width: 300px;
+  padding: 5px;
+  margin-right: 10px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+}
+
+button {
+  background-color: #007bff;
+  color: #fff;
+  border: none;
+  padding: 10px 20px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+button:hover {
+  background-color: #0056b3;
+}
+
+#music-list {
+  margin-top: 20px;
+}
+
+#music-list p {
+  margin: 5px 0;
+  font-weight: bold;
+}
+
+/* Estilos para o botão "Criar Playlist" */
+.spotify-button {
+  background-color: #1db954;
+  color: #fff;
+  text-decoration: none;
+  padding: 5px 10px;
+  border-radius: 3px;
+  margin-left: 10px;
+}
+
+.spotify-button:hover {
+  background-color: #169c43;
+}
+
+    </style>
+</head>
+<body>
+<h1>Youtube To Spotify (<a href="https://developer.spotify.com/" target="_blank">Ver documentação do Spotify para obter um token</a>)</h1>
+<div>
+    <label for="spotify-access-token">Token de Acesso Spotify:</label>
+    <input type="text" id="spotify-access-token">
+    <button onclick="fetchPopularMusic()">Pesquisar Músicas Populares e Criar Playlist</button>
+</div>
+<div id="music-list"></div>
+<script>
+    function fetchPopularMusic() {
+        const spotifyAccessToken = document.getElementById('spotify-access-token').value;
+        const musicList = document.getElementById('music-list');
+        
+        // Certifique-se de substituir 'SUA_CHAVE_DE_API_DO_YOUTUBE' pela sua chave de API do YouTube
+        fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&videoCategoryId=10&maxResults=20&key=AIzaSyDveMPWEySYWVotJWYVy9jLr7PZIuPJRjk`)
+            .then(response => response.json())
+            .then(data => {
+                const videos = data.items;
+                const trackUris = [];
+                let output = '';
+                
+                videos.forEach(video => {
+                    const title = video.snippet.title;
+                    
+                    searchTrackOnSpotify(title, spotifyAccessToken)
+                        .then(trackUri => {
+                            if (trackUri) {
+                                trackUris.push(trackUri);
+                                output += `
+                                    <p>${title}</p>
+                                `;
+                                musicList.innerHTML = output;
+                            }
+                        })
+                        .catch(error => console.error(error));
+                });
+                
+                createSpotifyPlaylist(trackUris, spotifyAccessToken);
+            })
+            .catch(error => console.error(error));
+    }
+
+    function searchTrackOnSpotify(trackName, accessToken) {
+        return new Promise((resolve, reject) => {
+            fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(trackName)}&type=track&limit=1`, {
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.tracks && data.tracks.items.length > 0) {
+                        const trackUri = data.tracks.items[0].uri;
+                        resolve(trackUri);
+                    } else {
+                        resolve(null);
+                    }
+                })
+                .catch(error => reject(error));
+        });
+    }
+
+    function createSpotifyPlaylist(trackUris, accessToken) {
+        fetch(`https://api.spotify.com/v1/me`, {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+            },
+        })
+            .then(response => response.json())
+            .then(data => {
+                const userId = data.id;
+                
+                fetch(`https://api.spotify.com/v1/users/${userId}/playlists`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        name: 'Top Youtube Music',
+                        public: true,
+                    }),
+                })
+                    .then(response => response.json())
+                    .then(playlist => {
+                        const playlistId = playlist.id;
+                        
+                        fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${accessToken}`,
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                uris: trackUris,
+                            }),
+                        })
+                            .then(() => {
+                                console.log(`Playlist criada no Spotify com sucesso.`);
+                            })
+                            .catch(error => console.error('Erro ao adicionar faixas à playlist:', error));
+                    })
+                    .catch(error => console.error('Erro ao criar a playlist:', error));
+            })
+            .catch(error => console.error('Erro ao obter informações do usuário:', error));
+    }
+</script>
+</body>
+</html>
